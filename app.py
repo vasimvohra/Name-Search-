@@ -285,44 +285,62 @@ def main():
 
         if excel_input:
             try:
-                # Read Excel with first row as header
-                df = pd.read_excel(excel_input, dtype=str, header=0)
+                # Read Excel WITHOUT header to see actual content
+                df = pd.read_excel(excel_input, dtype=str, header=None)
 
-                # Show column selection with numbers
-                st.sidebar.markdown("**📋 Available Columns:**")
-                columns_list = list(df.columns)
+                # Get column count
+                num_columns = len(df.columns)
 
-                # Display columns with numbers
-                for idx, col in enumerate(columns_list, 1):
-                    st.sidebar.write(f"**{idx}.** {col}")
+                # If only one column, use it automatically
+                if num_columns == 1:
+                    st.sidebar.info(f"✅ Using the only column")
+                    col_idx = 0
 
-                # Input for column selection
-                col_choice = st.sidebar.text_input(
-                    "Enter column number to use (e.g., 1, 2, 3):",
-                    placeholder="1"
-                )
+                    if st.sidebar.button("✅ Load", type="primary", use_container_width=True):
+                        # Load all values from this column
+                        values = df[col_idx].dropna().unique()
+                        display_names = [str(v).strip() for v in values if str(v).strip()]
+                        search_terms, search_names_map = prepare_search_terms(display_names)
+                        st.session_state.search_terms = search_terms
+                        st.session_state.search_terms_display = display_names
+                        st.session_state.search_names_map = search_names_map
+                        st.session_state.results_data = None
+                        st.session_state.input_filename = Path(excel_input.name).stem
+                        st.sidebar.success(f"✅ {len(values)} names loaded!")
+                        st.rerun()
 
-                if st.sidebar.button("✅ Load", type="primary", use_container_width=True):
-                    try:
-                        col_idx = int(col_choice) - 1
-                        if 0 <= col_idx < len(columns_list):
-                            column = columns_list[col_idx]
-                            st.sidebar.success(f"✅ Selected: {column}")
+                else:
+                    # Multiple columns - show numbered list
+                    st.sidebar.markdown("**📋 Available Columns:**")
+                    for idx in range(num_columns):
+                        # Show first non-empty value as column name
+                        col_sample = df[idx].dropna().iloc[0] if len(df[idx].dropna()) > 0 else f"Column {idx+1}"
+                        st.sidebar.write(f"**{idx+1}.** {col_sample} (Sample)")
 
-                            values = df[column].dropna().unique()
-                            display_names = [str(v).strip() for v in values if str(v).strip()]
-                            search_terms, search_names_map = prepare_search_terms(display_names)
-                            st.session_state.search_terms = search_terms
-                            st.session_state.search_terms_display = display_names
-                            st.session_state.search_names_map = search_names_map
-                            st.session_state.results_data = None
-                            st.session_state.input_filename = Path(excel_input.name).stem
-                            st.sidebar.success(f"✅ {len(values)} names loaded!")
-                            st.rerun()
-                        else:
-                            st.sidebar.error(f"❌ Invalid! Enter number between 1 and {len(columns_list)}")
-                    except ValueError:
-                        st.sidebar.error("❌ Please enter a valid number!")
+                    # Input for column selection
+                    col_choice = st.sidebar.text_input(
+                        "Enter column number to use:",
+                        placeholder="1"
+                    )
+
+                    if st.sidebar.button("✅ Load", type="primary", use_container_width=True):
+                        try:
+                            col_idx = int(col_choice) - 1
+                            if 0 <= col_idx < num_columns:
+                                values = df[col_idx].dropna().unique()
+                                display_names = [str(v).strip() for v in values if str(v).strip()]
+                                search_terms, search_names_map = prepare_search_terms(display_names)
+                                st.session_state.search_terms = search_terms
+                                st.session_state.search_terms_display = display_names
+                                st.session_state.search_names_map = search_names_map
+                                st.session_state.results_data = None
+                                st.session_state.input_filename = Path(excel_input.name).stem
+                                st.sidebar.success(f"✅ {len(values)} names loaded!")
+                                st.rerun()
+                            else:
+                                st.sidebar.error(f"❌ Invalid! Enter number between 1 and {num_columns}")
+                        except ValueError:
+                            st.sidebar.error("❌ Please enter a valid number!")
 
             except Exception as e:
                 st.sidebar.error(f"Error: {e}")
