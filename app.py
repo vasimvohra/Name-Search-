@@ -227,6 +227,8 @@ def main():
         st.session_state.search_names_map = {}
     if 'results_data' not in st.session_state:
         st.session_state.results_data = None
+    if 'input_filename' not in st.session_state:
+        st.session_state.input_filename = None
 
     # Sidebar
     st.sidebar.header("📋 Provide Names to Search")
@@ -252,6 +254,7 @@ def main():
                 st.session_state.search_terms_display = lines
                 st.session_state.search_names_map = search_names_map
                 st.session_state.results_data = None
+                st.session_state.input_filename = "manual_input"
                 st.sidebar.success(f"✅ {len(lines)} names loaded!")
                 st.rerun()
             else:
@@ -270,6 +273,7 @@ def main():
                 st.session_state.search_terms_display = lines
                 st.session_state.search_names_map = search_names_map
                 st.session_state.results_data = None
+                st.session_state.input_filename = Path(txt_file.name).stem
                 st.sidebar.success(f"✅ {len(lines)} names loaded!")
                 st.rerun()
             except Exception as e:
@@ -297,6 +301,7 @@ def main():
                     st.session_state.search_terms_display = display_names
                     st.session_state.search_names_map = search_names_map
                     st.session_state.results_data = None
+                    st.session_state.input_filename = Path(excel_input.name).stem
                     st.sidebar.success(f"✅ {len(values)} names loaded!")
                     st.rerun()
             except Exception as e:
@@ -315,6 +320,7 @@ def main():
             st.session_state.search_terms_display = []
             st.session_state.search_names_map = {}
             st.session_state.results_data = None
+            st.session_state.input_filename = None
             st.rerun()
 
     # Main area
@@ -325,7 +331,7 @@ def main():
         if st.button("🚀 START SEARCH", type="primary", use_container_width=True):
             with st.spinner("Searching..."):
                 results, file_count = searcher.search_all_excel_files(
-                    st.session_state.search_terms,
+                    st.session_state.search_terms, 
                     st.session_state.search_names_map,
                     st.session_state.search_terms_display
                 )
@@ -368,15 +374,17 @@ def main():
                 unique_parts = results_df[results_df['Part_Number'] != 'Not Found']['Part_Number'].nunique()
                 st.metric("Unique Parts", unique_parts)
 
-            # ⬇️ DOWNLOAD BUTTON AT TOP - NO SCROLLING NEEDED ⬇️
+            # ⬇️ DOWNLOAD BUTTON AT TOP ⬇️
             st.markdown("### 📥 Download Results")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             excel_output, _ = searcher.create_results_excel(results, st.session_state.search_terms_display)
+
+            # Generate filename with input filename + "_output"
+            output_filename = f"{st.session_state.input_filename}_output.xlsx"
 
             st.download_button(
                 label="📥 Download Results (Excel with Auto-Adjusted Columns)",
                 data=excel_output,
-                file_name=f"search_results_{timestamp}.xlsx",
+                file_name=output_filename,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
                 type="primary"
