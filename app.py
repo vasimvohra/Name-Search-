@@ -124,42 +124,41 @@ class NameSearcher:
             worksheet.column_dimensions[chr(65 + idx)].width = adjusted_width
 
     def create_results_excel(self, results, search_terms_display):
-        """Create Excel file with results - sorted by Searched_Name with auto-adjusted columns"""
+        """Create Excel file with results - SAME FORMAT AS offline_app.py"""
         output = io.BytesIO()
 
         results_df = pd.DataFrame(results)
+        # Sort by Searched_Name to group same names together
         results_df = results_df.sort_values('Searched_Name', kind='stable')
 
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Sheet 1: Search_Results (all results grouped by name)
             results_df.to_excel(writer, sheet_name='Search_Results', index=False)
-
-            # Auto-adjust column widths for Search_Results sheet
             worksheet = writer.sheets['Search_Results']
             self.auto_adjust_column_width(worksheet, results_df)
 
+            # Only create summaries if there are found results
             if len(results) > 0:
                 found_results = results_df[results_df['Part_Number'] != 'Not Found']
+
                 if len(found_results) > 0:
+                    # Sheet 2: Summary by Name
                     name_summary = found_results.groupby('Searched_Name').size().reset_index(name='Match_Count')
                     name_summary = name_summary.sort_values('Match_Count', ascending=False)
                     name_summary.to_excel(writer, sheet_name='Summary_by_Name', index=False)
-
-                    # Auto-adjust for Summary_by_Name
                     worksheet_summary = writer.sheets['Summary_by_Name']
                     self.auto_adjust_column_width(worksheet_summary, name_summary)
 
+                    # Sheet 3: Summary by Part
                     part_summary = found_results.groupby('Part_Number').size().reset_index(name='Match_Count')
                     part_summary = part_summary.sort_values('Match_Count', ascending=False)
                     part_summary.to_excel(writer, sheet_name='Summary_by_Part', index=False)
-
-                    # Auto-adjust for Summary_by_Part
                     worksheet_part = writer.sheets['Summary_by_Part']
                     self.auto_adjust_column_width(worksheet_part, part_summary)
 
+            # Sheet 4: Search_Terms
             patterns_df = pd.DataFrame({'Search_Terms_Used': search_terms_display})
             patterns_df.to_excel(writer, sheet_name='Search_Terms', index=False)
-
-            # Auto-adjust for Search_Terms
             worksheet_terms = writer.sheets['Search_Terms']
             self.auto_adjust_column_width(worksheet_terms, patterns_df)
 
@@ -197,7 +196,7 @@ def main():
 
     # Check if folder exists
     if not os.path.exists(EXCEL_FOLDER):
-        st.error(f"❌ Excel folder '{EXCEL_FOLDER}' not found in repository!")
+        st.error(f"❌ Excel folder '{EXCEL_FOLDER}' not found!")
         st.info("Please add the 'excel_output' folder with Excel files.")
         st.stop()
 
@@ -285,19 +284,16 @@ def main():
 
         if excel_input:
             try:
-                # Read Excel WITHOUT header to see actual content
+                # Read Excel WITHOUT header
                 df = pd.read_excel(excel_input, dtype=str, header=None)
-
-                # Get column count
                 num_columns = len(df.columns)
 
-                # If only one column, use it automatically
+                # Single column - auto select
                 if num_columns == 1:
                     st.sidebar.info(f"✅ Using the only column")
                     col_idx = 0
 
                     if st.sidebar.button("✅ Load", type="primary", use_container_width=True):
-                        # Load all values from this column
                         values = df[col_idx].dropna().unique()
                         display_names = [str(v).strip() for v in values if str(v).strip()]
                         search_terms, search_names_map = prepare_search_terms(display_names)
@@ -310,18 +306,13 @@ def main():
                         st.rerun()
 
                 else:
-                    # Multiple columns - show numbered list
+                    # Multiple columns - numbered list
                     st.sidebar.markdown("**📋 Available Columns:**")
                     for idx in range(num_columns):
-                        # Show first non-empty value as column name
                         col_sample = df[idx].dropna().iloc[0] if len(df[idx].dropna()) > 0 else f"Column {idx+1}"
                         st.sidebar.write(f"**{idx+1}.** {col_sample} (Sample)")
 
-                    # Input for column selection
-                    col_choice = st.sidebar.text_input(
-                        "Enter column number to use:",
-                        placeholder="1"
-                    )
+                    col_choice = st.sidebar.text_input("Enter column number to use:", placeholder="1")
 
                     if st.sidebar.button("✅ Load", type="primary", use_container_width=True):
                         try:
@@ -412,11 +403,9 @@ def main():
                 unique_parts = results_df[results_df['Part_Number'] != 'Not Found']['Part_Number'].nunique()
                 st.metric("Unique Parts", unique_parts)
 
-            # ⬇️ DOWNLOAD BUTTON AT TOP ⬇️
+            # DOWNLOAD BUTTON AT TOP
             st.markdown("### 📥 Download Results")
             excel_output, _ = searcher.create_results_excel(results, st.session_state.search_terms_display)
-
-            # Generate filename with input filename + "_output"
             output_filename = f"{st.session_state.input_filename}_output.xlsx"
 
             st.download_button(
@@ -430,7 +419,7 @@ def main():
 
             st.markdown("---")
 
-            # Results table (scrollable)
+            # Results table
             st.subheader("📋 Search Results (Grouped by Name)")
             st.dataframe(
                 results_df,
@@ -470,7 +459,7 @@ def main():
         st.markdown("1. Choose input method from sidebar")
         st.markdown("2. Load the names to search")
         st.markdown("3. Click START SEARCH")
-        st.markdown("4. Download button appears at top (no scrolling!)")
+        st.markdown("4. Download Excel output with auto-adjusted columns")
 
 
 if __name__ == "__main__":
