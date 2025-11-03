@@ -11,7 +11,7 @@ import io
 class NameSearcher:
     """Name Search Tool reading from fixed folder"""
 
-    def __init__(self, excel_folder="excel_output"):
+    def __init__(self, excel_folder="nadiad_chaklasi_excel_database"):
         self.excel_folder = excel_folder
 
     def extract_part_number(self, file_path):
@@ -34,6 +34,26 @@ class NameSearcher:
         except Exception as e:
             return "Error"
 
+    def extract_vidhansabha(self, file_path):
+        """Extract Vidhansabha from row 7 of the Excel file"""
+        try:
+            df = pd.read_excel(file_path, sheet_name=0, nrows=10, header=None, dtype=str)
+
+            if len(df) > 6:
+                row_7_data = df.iloc[6]
+
+                for cell in row_7_data:
+                    if pd.notna(cell):
+                        cell_str = str(cell)
+                        if ':' in cell_str:
+                            vidhansabha = cell_str.split(':')[-1].strip()
+                            if vidhansabha:
+                                return vidhansabha
+
+            return "N/A"
+        except Exception as e:
+            return "Error"
+
     def extract_row_number(self, matched_content):
         """Extract the first number (before first space) from matched content"""
         if pd.isna(matched_content):
@@ -50,6 +70,7 @@ class NameSearcher:
 
         try:
             part_number = self.extract_part_number(file_path)
+            vidhansabha = self.extract_vidhansabha(file_path)
             excel_data = pd.read_excel(file_path, sheet_name=None, dtype=str)
 
             for sheet_name, df in excel_data.items():
@@ -65,6 +86,7 @@ class NameSearcher:
 
                                     results.append({
                                         'Searched_Name': search_name,
+                                        'Vidhansabha': vidhansabha,
                                         'Part_Number': part_number,
                                         'Row_Number': row_number,
                                         'Matched_Content': cell_str
@@ -103,6 +125,7 @@ class NameSearcher:
         for name in not_found_names:
             all_results.append({
                 'Searched_Name': name,
+                'Vidhansabha': 'Not Found',
                 'Part_Number': 'Not Found',
                 'Row_Number': '',
                 'Matched_Content': ''
@@ -123,16 +146,32 @@ class NameSearcher:
             adjusted_width = min(max_length + 2, 80)
             worksheet.column_dimensions[chr(65 + idx)].width = adjusted_width
 
+    def sort_results_by_input_order(self, results_df, input_names_list):
+        """Sort results to match the input order of names"""
+        # Create a mapping of name to its input order
+        name_order_map = {name: idx for idx, name in enumerate(input_names_list)}
+
+        # Add a temporary column for sorting
+        results_df['_sort_order'] = results_df['Searched_Name'].map(name_order_map)
+
+        # Sort by this column, then by other criteria for stable sorting
+        results_df = results_df.sort_values('_sort_order', kind='stable')
+
+        # Remove the temporary sorting column
+        results_df = results_df.drop('_sort_order', axis=1)
+
+        return results_df
+
     def create_results_excel(self, results, search_terms_display):
         """Create Excel file with results - SAME FORMAT AS offline_app.py"""
         output = io.BytesIO()
 
         results_df = pd.DataFrame(results)
-        # Sort by Searched_Name to group same names together
-        results_df = results_df.sort_values('Searched_Name', kind='stable')
+        # Sort by input order of names
+        results_df = self.sort_results_by_input_order(results_df, search_terms_display)
 
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet 1: Search_Results (all results grouped by name)
+            # Sheet 1: Search_Results (all results grouped by name in input order)
             results_df.to_excel(writer, sheet_name='Search_Results', index=False)
             worksheet = writer.sheets['Search_Results']
             self.auto_adjust_column_width(worksheet, results_df)
@@ -142,9 +181,13 @@ class NameSearcher:
                 found_results = results_df[results_df['Part_Number'] != 'Not Found']
 
                 if len(found_results) > 0:
-                    # Sheet 2: Summary by Name
-                    name_summary = found_results.groupby('Searched_Name').size().reset_index(name='Match_Count')
-                    name_summary = name_summary.sort_values('Match_Count', ascending=False)
+                    # Sheet 2: Summary by Name (maintaining input order)
+                    name_summary = found_results.groupby('Searched_Name', sort=False).size().reset_index(name='Match_Count')
+                    # Reorder based on input
+                    name_order_map = {name: idx for idx, name in enumerate(search_terms_display)}
+                    name_summary['_sort_order'] = name_summary['Searched_Name'].map(name_order_map)
+                    name_summary = name_summary.sort_values('_sort_order', kind='stable')
+                    name_summary = name_summary.drop('_sort_order', axis=1)
                     name_summary.to_excel(writer, sheet_name='Summary_by_Name', index=False)
                     worksheet_summary = writer.sheets['Summary_by_Name']
                     self.auto_adjust_column_width(worksheet_summary, name_summary)
@@ -192,7 +235,7 @@ def main():
     st.title("🔍 Name Search Tool")
     st.markdown("Search for names in Excel files easily!")
 
-    EXCEL_FOLDER = "excel_output"
+    EXCEL_FOLDER = "nadiad_chaklasi_excel_database"
 
     # Check if folder exists
     if not os.path.exists(EXCEL_FOLDER):
@@ -384,6 +427,8 @@ def main():
 
         if results:
             results_df = pd.DataFrame(results)
+            # Sort by input order of names
+            results_df = searcher.sort_results_by_input_order(results_df, st.session_state.search_terms_display)
 
             found_count = len(results_df[results_df['Part_Number'] != 'Not Found'])
             not_found_count = len(results_df[results_df['Part_Number'] == 'Not Found'])
@@ -427,6 +472,7 @@ def main():
                 height=400,
                 column_config={
                     "Searched_Name": "🔍 Searched Name",
+                    "Vidhansabha": "🏛️ Vidhansabha",
                     "Part_Number": "🔢 Part Number",
                     "Row_Number": "📍 Row Number",
                     "Matched_Content": "✅ Matched Content",
@@ -441,8 +487,13 @@ def main():
                 st.subheader("📈 Matches by Name")
                 found_results = results_df[results_df['Part_Number'] != 'Not Found']
                 if len(found_results) > 0:
-                    name_summary = found_results.groupby('Searched_Name').size().reset_index(name='Matches')
-                    st.dataframe(name_summary.sort_values('Matches', ascending=False), hide_index=True, use_container_width=True)
+                    name_summary = found_results.groupby('Searched_Name', sort=False).size().reset_index(name='Matches')
+                    # Reorder based on input
+                    name_order_map = {name: idx for idx, name in enumerate(st.session_state.search_terms_display)}
+                    name_summary['_sort_order'] = name_summary['Searched_Name'].map(name_order_map)
+                    name_summary = name_summary.sort_values('_sort_order', kind='stable')
+                    name_summary = name_summary.drop('_sort_order', axis=1)
+                    st.dataframe(name_summary, hide_index=True, use_container_width=True)
 
             with col2:
                 st.subheader("📊 Matches by Part")
