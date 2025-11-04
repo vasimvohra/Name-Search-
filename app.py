@@ -11,7 +11,7 @@ import io
 class NameSearcher:
     """Name Search Tool reading from fixed folder"""
 
-    def __init__(self, excel_folder="excel_output"):
+    def __init__(self, excel_folder="nadiad_excel_database"):
         self.excel_folder = excel_folder
 
     def extract_part_number(self, file_path):
@@ -235,7 +235,7 @@ def main():
     st.title("🔍 Name Search Tool")
     st.markdown("Search for names in Excel files easily!")
 
-    EXCEL_FOLDER = "excel_output"
+    EXCEL_FOLDER = "nadiad_excel_database"
 
     # Check if folder exists
     if not os.path.exists(EXCEL_FOLDER):
@@ -515,4 +515,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
